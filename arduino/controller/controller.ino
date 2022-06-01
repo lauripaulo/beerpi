@@ -8,26 +8,88 @@
 #define LCD_ADDRESS 0x3f
 TwiLiquidCrystal lcd(LCD_ADDRESS);
 
+String isEspResponseComplete = "";  // a String to hold incoming data
+bool stringComplete = false;        // whether the string is complete
+bool isLcdEnabled = false;          // Enable LCD
+int initEspStep = 0;
+
+
 void setup() {
   Wire.begin();
-  Serial.begin(9600);
-  while (!Serial)
-    ; // waiting for the serial monitor to become available
+  Serial.begin(115200);
+  Serial3.begin(115200);
+  while (!Serial && !Serial3)
+     ; // waiting for the serial monitor to become available
   // All set, we can proceed.
   Serial.println("\nBeer controller starting");
-  lcd.clear();
-  lcd.home();
+  isEspResponseComplete.reserve(128);
+  initLcd();
+}
+
+void executeEspSteps() {
+  switch (initEspStep) {
+    case 0:
+      Serial.println("Step 1");
+      Serial3.write("AT\n");
+      initEspStep ++;
+      delay(500);
+      break;
+    case 1:
+      Serial.println("Step 2");
+      Serial3.write("AT+GMR\n");
+      initEspStep ++;
+      delay(500);
+      break;
+    case 2:
+      // nothing else to do.
+      break;
+    default:
+      Serial.println("Not a valid step.");
+  }
+  Serial3.flush();
+}
+
+void initLcd() {
+  if (isLcdEnabled) {
+    lcd.clear();
+    lcd.home();
+    lcd.backlight();
+  }
+}
+
+/*
+  This routine is run between each time loop() runs, so using delay inside 
+  loop can delay response. Multiple bytes of data may be available.
+*/
+void evaluateESP() {
+  while (Serial3.available()) {
+    // get the new byte:
+    char inChar = (char)Serial3.read();
+    // add it to the isEspResponseComplete:
+    isEspResponseComplete += inChar;
+    // if the incoming character is a newline, set a flag so the main loop can
+    // do something about it:
+    if (inChar == '\n') {
+      stringComplete = true;
+    }
+  }
 }
 
 void loop() {
-  lcd.home();
-  lcd.backlight();
-  lcd.print("Hello, World!");
-  delay(2000);
-  lcd.noBacklight();
-  lcd.clear();
-  delay(2000);
-  Serial.println("Loop ok.");
+  // print the string when a newline arrives:
+  executeEspSteps();
+  evaluateESP();
+  if (stringComplete) {
+    Serial.println(isEspResponseComplete);
+    // clear the string:
+    isEspResponseComplete = "";
+    stringComplete = false;
+  }
+// // Update and send command to other serial
+//  if (Serial.available()) {
+//    char resp = (char)Serial.read();
+//    Serial3.write(resp);
+//  }
 }
 
 /*
