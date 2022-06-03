@@ -7,18 +7,22 @@
 #define STATE_IDLE              1
 #define STATE_ERROR             2
 #define STATE_PROBING_ESP8266   3
+#define STATE_WIFI_CONECT       4
 
-#define TIMEOUT                 5000
+#define TIMEOUT                 10000
 
-const char* ESP_TEST      = "AT";                // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
+const char* ESP_TEST      = "AT";                  // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
 const char* ESP_RESET     = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
-//String ESP_INFO      = "AT+GMR";              // This will mention the firmware version installed on the ESP8266.
-//String ESP_LIST      = "AT+CWLAP";            // This will detect the Access points and their signal strengths available in the area.
-//String ESP_CONNECT   = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
-//String ESP_IP        = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
-//String ESP_DISCONECT = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
-//String ESP_SETMODE   = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
-//
+const char* ESP_INFO      = "AT+GMR";              // This will mention the firmware version installed on the ESP8266.
+const char* ESP_LIST      = "AT+CWLAP";            // This will detect the Access points and their signal strengths available in the area.
+const char* ESP_CONNECT   = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
+const char* ESP_IP        = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
+const char* ESP_DISCONECT = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
+const char* ESP_SETWIFI   = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
+
+const char* WIFI_SSID     = "";
+const char* WIFI_PASSWD   = "";
+
 const TwiLiquidCrystal lcd(LCD_ADDRESS);
 
 // String uartContent = "";         // a String to hold incoming data
@@ -26,6 +30,15 @@ bool globalUartReadComplete = false;    // whether the string is complete
 bool isLcdEnabled = false;          // Enable LCD
 byte globalState = STATE_IDLE;
 String globalUartBuffer = "";
+String globalIpAddress = "";
+
+String getIpAddress() {
+  return globalIpAddress;
+}
+
+void setIpAddress(String address) {
+  globalIpAddress = address;
+}
 
 String getUartBuffer() {
   return globalUartBuffer;
@@ -94,27 +107,26 @@ void setUartReadComplete(bool completed) {
 }
 
 bool execEsp8266Cmd(const char* cmd, unsigned long timeout) {
-  bool res = false;
   bool completed = false;
+  delay(100); // give some time to esp8266 work between commands.
   unsigned long startTime = millis();
+  Serial.print("UART:\n---\n");
   resetUartReadState();
   Serial3.println(cmd);
   do {
-    delay(50); // give uart buffer time to think.
     readUART();
     if (millis() - startTime > timeout) {
       Serial.println("UART timeout!");
       return false;
     }
-    completed = getUartBuffer().lastIndexOf("OK") > 0 || getUartBuffer().lastIndexOf("ERROR") > 0;
+    if (getUartBuffer().lastIndexOf("ERROR") > 0) {
+      return false;
+    }
+    completed = getUartBuffer().lastIndexOf("OK") > 0;
   } while (!completed);
-  Serial.print("UART:\n---\n");
   Serial.print(getUartBuffer());
   Serial.println("---");
-  if (getUartBuffer().lastIndexOf("OK") > 0) {
-    res = true;
-  }
-  return res;
+  return true;
 }
 
 
@@ -124,26 +136,46 @@ void loop() {
       Serial.println("Testing ESP8266 conectivity...");
       if (execEsp8266Cmd(ESP_TEST, TIMEOUT)) {
         Serial.println("ESP8266 found at Serial3 (UART).");
-        changeGlobalState(STATE_IDLE);
+        changeGlobalState(STATE_WIFI_CONECT);
       } else {
         Serial.println("Error, ESP8266 not found.");
-        Serial.println("Fatal ERROR.");
         changeGlobalState(STATE_ERROR);
       }
       break;
 
-    case STATE_ERROR:
-      delay(5000);
-      Serial.println("System halted!");
+    case STATE_WIFI_CONECT:
+      String connectCmd = String(ESP_CONNECT) + "\"" + WIFI_SSID + "\",\"" + WIFI_PASSWD + "\"";
+      if (execEsp8266Cmd(connectCmd.c_str(), TIMEOUT)) {
+        Serial.println("Wifi connected!");
+        if (execEsp8266Cmd(ESP_IP, TIMEOUT)) {
+          int start = getUartBuffer().indexOf("STAIP") + 2;
+          int end = getUartBuffer().lastIndexOf("\"") - 1;
+          setIpAddress(getUartBuffer().substring(start, end));
+          changeGlobalState(STATE_IDLE);
+        }
+        changeGlobalState(STATE_ERROR);
+      } else {
+        Serial.println("Cannot connect to Wifi.");
+        changeGlobalState(STATE_ERROR);
+      }
       break;
 
     case STATE_IDLE:
-      delay(50); // nothing to do yet...
+      Serial.print("IDLE... IP=");
+      Serial.println(getIpAddress());
+      delay(5000); // nothing to do yet...
+      break;
+
+    case STATE_ERROR:
+      Serial.println("Fatal ERROR. System halted!");
+      delay(5000);
+      break;
+
   }
 }
 
 
-//void loop() {
+// void loop() {
 //  // print the string when a newline arrives:
 //  readUART();
 //  if (isUartReadComplete()) {
@@ -156,7 +188,7 @@ void loop() {
 //    char resp = (char)Serial.read();
 //    Serial3.write(resp);
 //  }
-//}
+// }
 
 /*
    Helper function to find first i2c address in the bus.
