@@ -8,8 +8,10 @@
 #define STATE_ERROR             2
 #define STATE_PROBING_ESP8266   3
 
-const char* ESP_TEST      = "AT\n";                // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
-//String ESP_RESET     = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
+#define TIMEOUT                 5000
+
+const char* ESP_TEST      = "AT";                // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
+const char* ESP_RESET     = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
 //String ESP_INFO      = "AT+GMR";              // This will mention the firmware version installed on the ESP8266.
 //String ESP_LIST      = "AT+CWLAP";            // This will detect the Access points and their signal strengths available in the area.
 //String ESP_CONNECT   = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
@@ -91,18 +93,24 @@ void setUartReadComplete(bool completed) {
   globalUartReadComplete = completed;
 }
 
-bool isEsp8266Present() {
+bool execEsp8266Cmd(const char* cmd, unsigned long timeout) {
   bool res = false;
   bool completed = false;
+  unsigned long startTime = millis();
   resetUartReadState();
-  Serial3.println("AT");
+  Serial3.println(cmd);
   do {
     delay(50); // give uart buffer time to think.
     readUART();
-    completed  = getUartBuffer().lastIndexOf("OK") > 0 || getUartBuffer().lastIndexOf("ERROR") > 0;
+    if (millis() - startTime > timeout) {
+      Serial.println("UART timeout!");
+      return false;
+    }
+    completed = getUartBuffer().lastIndexOf("OK") > 0 || getUartBuffer().lastIndexOf("ERROR") > 0;
   } while (!completed);
-  Serial.print("UART:\n");
-  Serial.println(getUartBuffer());
+  Serial.print("UART:\n---\n");
+  Serial.print(getUartBuffer());
+  Serial.println("---");
   if (getUartBuffer().lastIndexOf("OK") > 0) {
     res = true;
   }
@@ -111,16 +119,26 @@ bool isEsp8266Present() {
 
 
 void loop() {
-  if (getGlobalState() == STATE_PROBING_ESP8266) {
-    Serial.println("Testing ESP8266 conectivity...");
-    if (isEsp8266Present()) {
-      Serial.println("ESP8266 found at Serial3 (UART).");
-      changeGlobalState(STATE_IDLE);
-    } else {
-      Serial.println("Error, ESP8266 not found.");
-      Serial.println("Fatal ERROR.");
-      changeGlobalState(STATE_ERROR);
-    }
+  switch (getGlobalState()) {
+    case STATE_PROBING_ESP8266:
+      Serial.println("Testing ESP8266 conectivity...");
+      if (execEsp8266Cmd(ESP_TEST, TIMEOUT)) {
+        Serial.println("ESP8266 found at Serial3 (UART).");
+        changeGlobalState(STATE_IDLE);
+      } else {
+        Serial.println("Error, ESP8266 not found.");
+        Serial.println("Fatal ERROR.");
+        changeGlobalState(STATE_ERROR);
+      }
+      break;
+
+    case STATE_ERROR:
+      delay(5000);
+      Serial.println("System halted!");
+      break;
+
+    case STATE_IDLE:
+      delay(50); // nothing to do yet...
   }
 }
 
