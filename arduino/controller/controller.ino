@@ -8,15 +8,15 @@
 #define STATE_ERROR             2
 #define STATE_PROBING_ESP8266   3
 
-const String ESP_TEST      = "AT\n";                // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
-const String ESP_RESET     = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
-const String ESP_INFO      = "AT+GMR";              // This will mention the firmware version installed on the ESP8266.
-const String ESP_LIST      = "AT+CWLAP";            // This will detect the Access points and their signal strengths available in the area.
-const String ESP_CONNECT   = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
-const String ESP_IP        = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
-const String ESP_DISCONECT = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
-const String ESP_SETMODE   = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
-
+const char* ESP_TEST      = "AT\n";                // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
+//String ESP_RESET     = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
+//String ESP_INFO      = "AT+GMR";              // This will mention the firmware version installed on the ESP8266.
+//String ESP_LIST      = "AT+CWLAP";            // This will detect the Access points and their signal strengths available in the area.
+//String ESP_CONNECT   = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
+//String ESP_IP        = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
+//String ESP_DISCONECT = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
+//String ESP_SETMODE   = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
+//
 const TwiLiquidCrystal lcd(LCD_ADDRESS);
 
 // String uartContent = "";         // a String to hold incoming data
@@ -93,10 +93,15 @@ void setUartReadComplete(bool completed) {
 
 bool isEsp8266Present() {
   bool res = false;
-  Serial3.write("AT+GMR\n ");
-  delay(200);
-  readUART();
-  Serial.print("UART: ");
+  bool completed = false;
+  resetUartReadState();
+  Serial3.println("AT");
+  do {
+    delay(50); // give uart buffer time to think.
+    readUART();
+    completed  = getUartBuffer().lastIndexOf("OK") > 0 || getUartBuffer().lastIndexOf("ERROR") > 0;
+  } while (!completed);
+  Serial.print("UART:\n");
   Serial.println(getUartBuffer());
   if (getUartBuffer().lastIndexOf("OK") > 0) {
     res = true;
@@ -104,10 +109,9 @@ bool isEsp8266Present() {
   return res;
 }
 
-/*
-  void loop() {
+
+void loop() {
   if (getGlobalState() == STATE_PROBING_ESP8266) {
-    resetUartReadState();
     Serial.println("Testing ESP8266 conectivity...");
     if (isEsp8266Present()) {
       Serial.println("ESP8266 found at Serial3 (UART).");
@@ -118,23 +122,23 @@ bool isEsp8266Present() {
       changeGlobalState(STATE_ERROR);
     }
   }
-  }
-*/
-
-void loop() {
-  // print the string when a newline arrives:
-  readUART();
-  if (isUartReadComplete()) {
-    Serial.print(getUartBuffer());
-    // clear the string:
-    resetUartReadState();
-  }
-  // Update and send command to other serial
-  if (Serial.available()) {
-    char resp = (char)Serial.read();
-    Serial3.write(resp);
-  }
 }
+
+
+//void loop() {
+//  // print the string when a newline arrives:
+//  readUART();
+//  if (isUartReadComplete()) {
+//    Serial.print(getUartBuffer());
+//    // clear the string:
+//    resetUartReadState();
+//  }
+//  // Update and send command to other serial
+//  if (Serial.available()) {
+//    char resp = (char)Serial.read();
+//    Serial3.write(resp);
+//  }
+//}
 
 /*
    Helper function to find first i2c address in the bus.
