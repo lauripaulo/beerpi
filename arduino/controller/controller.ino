@@ -4,10 +4,11 @@
 // Create an LCD object and setting the I2C address
 #define LCD_ADDRESS 0x3f
 
-#define STATE_IDLE              1
-#define STATE_ERROR             2
-#define STATE_PROBING_ESP8266   3
-#define STATE_WIFI_CONECT       4
+const int STATE_IDLE            = 1;
+const int STATE_ERROR           = 2;
+const int STATE_PROBING_ESP8266 = 3;
+const int STATE_WIFI_CONECT     = 4;
+const int STATE_GETIP           = 5;
 
 #define TIMEOUT                 10000
 
@@ -29,6 +30,7 @@ const TwiLiquidCrystal lcd(LCD_ADDRESS);
 bool globalUartReadComplete = false;    // whether the string is complete
 bool isLcdEnabled = false;          // Enable LCD
 byte globalState = STATE_IDLE;
+byte lastGlobalState = globalState;
 String globalUartBuffer = "";
 String globalIpAddress = "";
 
@@ -48,8 +50,17 @@ void setUartBuffer(String buffer) {
   globalUartBuffer = buffer;
 }
 
+byte getLastGlobalState(byte state) {
+  return lastGlobalState;
+}
+
 void changeGlobalState(byte state) {
+  lastGlobalState = globalState;
   globalState = state;
+  Serial.print("> changeGlobalState: ");
+  Serial.print(globalState);
+  Serial.print(" / lastGlobalState: ");
+  Serial.println(lastGlobalState);
 }
 
 byte getGlobalState() {
@@ -117,9 +128,11 @@ bool execEsp8266Cmd(const char* cmd, unsigned long timeout) {
     readUART();
     if (millis() - startTime > timeout) {
       Serial.println("UART timeout!");
+      Serial3.flush();
       return false;
     }
     if (getUartBuffer().lastIndexOf("ERROR") > 0) {
+      Serial3.flush();
       return false;
     }
     completed = getUartBuffer().lastIndexOf("OK") > 0;
@@ -131,47 +144,52 @@ bool execEsp8266Cmd(const char* cmd, unsigned long timeout) {
 
 
 void loop() {
-  switch (getGlobalState()) {
-    case STATE_PROBING_ESP8266:
-      Serial.println("Testing ESP8266 conectivity...");
-      if (execEsp8266Cmd(ESP_TEST, TIMEOUT)) {
-        Serial.println("ESP8266 found at Serial3 (UART).");
-        changeGlobalState(STATE_WIFI_CONECT);
-      } else {
-        Serial.println("Error, ESP8266 not found.");
-        changeGlobalState(STATE_ERROR);
-      }
-      break;
-
-    case STATE_WIFI_CONECT:
-      String connectCmd = String(ESP_CONNECT) + "\"" + WIFI_SSID + "\",\"" + WIFI_PASSWD + "\"";
-      if (execEsp8266Cmd(connectCmd.c_str(), TIMEOUT)) {
-        Serial.println("Wifi connected!");
-        if (execEsp8266Cmd(ESP_IP, TIMEOUT)) {
-          int start = getUartBuffer().indexOf("STAIP") + 2;
-          int end = getUartBuffer().lastIndexOf("\"") - 1;
-          setIpAddress(getUartBuffer().substring(start, end));
-          changeGlobalState(STATE_IDLE);
-        }
-        changeGlobalState(STATE_ERROR);
-      } else {
-        Serial.println("Cannot connect to Wifi.");
-        changeGlobalState(STATE_ERROR);
-      }
-      break;
-
-    case STATE_IDLE:
-      Serial.print("IDLE... IP=");
-      Serial.println(getIpAddress());
-      delay(5000); // nothing to do yet...
-      break;
-
-    case STATE_ERROR:
-      Serial.println("Fatal ERROR. System halted!");
-      delay(5000);
-      break;
-
+  if (getGlobalState() == STATE_PROBING_ESP8266) {
+    Serial.println("Testing ESP8266 conectivity...");
+    if (execEsp8266Cmd(ESP_TEST, TIMEOUT)) {
+      Serial.println("ESP8266 found at Serial3 (UART).");
+      changeGlobalState(STATE_WIFI_CONECT);
+    } else {
+      Serial.println("Error, ESP8266 not found.");
+      changeGlobalState(STATE_ERROR);
+    }
   }
+
+  if (getGlobalState() ==  STATE_WIFI_CONECT) {
+    Serial.println("Waiting wifi...");
+    String connectCmd = String(ESP_CONNECT) + "\"" + WIFI_SSID + "\",\"" + WIFI_PASSWD + "\"";
+    if (execEsp8266Cmd(connectCmd.c_str(), TIMEOUT)) {
+      Serial.println("Wifi connected!");
+      changeGlobalState(STATE_GETIP);
+    } else {
+      Serial.println("Cannot connect to Wifi.");
+      changeGlobalState(STATE_ERROR);
+    }
+  }
+
+  if (getGlobalState() ==  STATE_GETIP) {
+    delay(200); // give esp8266 time to think.
+    if (execEsp8266Cmd(ESP_IP, TIMEOUT)) {
+      int start = getUartBuffer().indexOf("STAIP") + 7;
+      int end = getUartBuffer().lastIndexOf("+CIFSR:STAMAC") - 3;
+      setIpAddress(getUartBuffer().substring(start, end));
+      changeGlobalState(STATE_IDLE);
+    } else {
+      changeGlobalState(STATE_ERROR);
+    }
+  }
+
+  if (getGlobalState() ==  STATE_IDLE) {
+    Serial.print("IDLE... IP=");
+    Serial.println(getIpAddress());
+    delay(5000); // nothing to do yet...
+  }
+
+  if (getGlobalState() == STATE_ERROR) {
+    Serial.println("Fatal ERROR. System halted!");
+    delay(5000);
+  }
+
 }
 
 
