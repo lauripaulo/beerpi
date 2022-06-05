@@ -22,9 +22,9 @@ const char* ESP_LIST         = "AT+CWLAP";            // This will detect the Ac
 const char* ESP_CONNECT      = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
 const char* ESP_IP           = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
 const char* ESP_DISCONECT    = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
-const char* ESP_SETWIFI      = "AT+CWMODE=3";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
+const char* ESP_SETWIFI      = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
 const char* ESP_SEND_ENABLE  = "AT+CIPMODE=1";        // Enable UART-WiFi passthrough mode. 
-const char* ESP_MULTICONN    = "AT+CIPMUX=1";         // Enable multiple connections.
+const char* ESP_MULTICONN    = "AT+CIPMUX=1";         // Enable multiple connections, 1 == enabled.
 
 /*
 Create a TCP server, default	port	=	333
@@ -231,13 +231,22 @@ void loop() {
       Serial.print("Received:\n---\n");
       Serial.print(getUartBuffer());
       Serial.println("---");
+      // String resp = "Received message with: " + getUartBuffer();
+      // String cmd = String(ESP_SEND_DATA) + resp.length() + ":" + resp;
+      // Serial.println(cmd);
+      // if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
+      if (execEsp8266Cmd("AT+CIPSEND=0,5", TIMEOUT)) {
+        Serial3.println("12345");
+        Serial.println("Send OK!");
+        delay(100);
+      }
       resetUartReadState();
     }
   }
 
   if (getGlobalState() == STATE_ERROR) {
     Serial.println("Fatal ERROR. System halted!");
-    delay(5000);
+    delay(5000);  
   }
 
 }
