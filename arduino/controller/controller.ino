@@ -11,10 +11,9 @@ const int STATE_ERROR           = 2;
 const int STATE_PROBING_ESP8266 = 3;
 const int STATE_WIFI_CONECT     = 4;
 const int STATE_GETIP           = 5;
-const int STATE_CONNECT_SERVER  = 6;
-const int STATE_ENABLE_SEND     = 7;
-const int STATE_SEND_ON         = 8;
-const int STATE_DISABLE_SEND    = 9;
+const int STATE_START_SERVER    = 6;
+const int STATE_SEND            = 7;
+const int STATE_DISABLE_SEND    = 8;
 
 const char* ESP_TEST         = "AT";                  // This will check if the module is connected properly and its functioning, the module will reply with an acknowledgment.
 const char* ESP_RESET        = "AT+RST";              // This will reset the wifi module. Its good practice to reset it before or after it has been programmed.
@@ -23,34 +22,33 @@ const char* ESP_LIST         = "AT+CWLAP";            // This will detect the Ac
 const char* ESP_CONNECT      = "AT+CWJAP=";           // AT+CWJAP=”SSID”,”PASSWORD” This connects the ESP8266 to the specified SSID in the AT command mentioned in the previous code.
 const char* ESP_IP           = "AT+CIFSR";            // This will display the ESP8266’s obtained IP address.
 const char* ESP_DISCONECT    = "AT+CWJAP=\"\",\"\"";  // If the user wants to disconnect from any access point.
-const char* ESP_SETWIFI      = "AT+CWMODE=1";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
+const char* ESP_SETWIFI      = "AT+CWMODE=3";         // This sets the Wifi mode. It should be always set to Mode 1 if the module is going to be used as a node
 const char* ESP_SEND_ENABLE  = "AT+CIPMODE=1";        // Enable UART-WiFi passthrough mode. 
-const char* ESP_SEND_DISABLE = "AT+CIPMODE=0";        // Disable UART-WiFi passthrough mode.
-const char* ESP_CLOSE        = "AT+CIPCLOSE";         // End the TCP connection.
-
+const char* ESP_MULTICONN    = "AT+CIPMUX=1";         // Enable multiple connections.
 
 /*
-ESP8266 connects to the server as a TCP client. 
-Cnnect PC to the same router as ESP8266 is connected to. Using a 
-network tool on the PC to create a TCP server. 
+Create a TCP server, default	port	=	333
+When ESP8266 received data from server, it will prompt message below:
+
++IPD,0,n:xxxxxxxxxx				//	received	n	bytes,		data=xxxxxxxxxxx
 */
-const char* ESP_CONNECT_TO   = "AT+CIPSTART=\"TCP\",\"192.168.1.186\",\"5000";
+const char* ESP_STARTSERVER  = "AT+CIPSERVER=1";
 
 /*
-ESP8266 starts sending data to the server. 
-From now on, data received from UART will be transmitted to the server 
-automatically.
+Send data, example:
+
+AT+CIPSEND=0,4				 //	set	data length which will be sent, such as 4 bytes
+Recv 4	bytes
+
+SEND OK
 */
-const char* ESP_SEND_START   = "AT+CIPSEND";
+const char* ESP_SEND_DATA   = "AT+CIPSEND=0,";
+
 /*
 The aim of inputting “+++” is to exit UART-WiFi passthrough transmission and 
 turn back to accept normal AT command, while the TCP connection still remains 
 connected. So, we can also use command “AT+CIPSEND” to turn back into 
 UART-WiFi passthrough transmission
-*/
-const char* ESP_SEND_END     = "+++";
-/*
-End the TCP connection
 */
 
 
@@ -206,36 +204,35 @@ void loop() {
       int start = getUartBuffer().indexOf("STAIP") + 7;
       int end = getUartBuffer().lastIndexOf("+CIFSR:STAMAC") - 3;
       setIpAddress(getUartBuffer().substring(start, end));
-      changeGlobalState(STATE_CONNECT_SERVER);
+      changeGlobalState(STATE_START_SERVER);
     } else {
       changeGlobalState(STATE_ERROR);
     }
   }
 
-  if (getGlobalState() == STATE_CONNECT_SERVER) {
-    delay(500); // give esp8266 time to think.
-    Serial.println("Connecting to TCP server...");
-    Serial.println(ESP_CONNECT_TO.substring(12, ESP_CONNECT_TO.length()));
-    if (execEsp8266Cmd(ESP_CONNECT_TO, TIMEOUT)) {
-      changeGlobalState(STATE_ENABLE_SEND);
-    } else {
-      Serial.println("Cannot connect to server!");
-      changeGlobalState(STATE_ERROR);
-    }
-  }
-
-  if (getGlobalState() == STATE_ENABLE_SEND) {
-    if (execEsp8266Cmd(ESP_SEND_ENABLE, TIMEOUT)) {
-      Serial.println("UART-WiFi passthrough enabled.");
+  if (getGlobalState() == STATE_START_SERVER) {
+    if(execEsp8266Cmd(ESP_MULTICONN, TIMEOUT)) {
+      if (execEsp8266Cmd(ESP_STARTSERVER, TIMEOUT)) {
+        Serial.print("Server started! IP=");
+        Serial.println(getIpAddress());
+        resetUartReadState();
+        changeGlobalState(STATE_IDLE);
+      } else {
+        changeGlobalState(STATE_ERROR);
+      }
     } else {
       changeGlobalState(STATE_ERROR);
     }
   }
 
   if (getGlobalState() == STATE_IDLE) {
-    Serial.print("IDLE... IP=");
-    Serial.println(getIpAddress());
-    delay(5000); // nothing to do yet...
+    readUART();
+    if (isUartReadComplete()) {
+      Serial.print("Received:\n---\n");
+      Serial.print(getUartBuffer());
+      Serial.println("---");
+      resetUartReadState();
+    }
   }
 
   if (getGlobalState() == STATE_ERROR) {
