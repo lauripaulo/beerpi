@@ -6,6 +6,7 @@ PORT = 333  # The port used by the server
             
 def simple_exchange():
     message = NULL
+    print(f"Conecting to {HOST} port {PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as conn:
         conn.connect((HOST, PORT))
         while (True):
