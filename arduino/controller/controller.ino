@@ -92,6 +92,9 @@ void changeGlobalState(byte state) {
   Serial.print(globalState);
   Serial.print(" / lastGlobalState: ");
   Serial.println(lastGlobalState);
+  String lcdStateMsg =String(globalState) + "/" + String(lastGlobalState);
+  lcd.setCursor(16, 0);
+  lcd.print(lcdStateMsg);
 }
 
 byte getGlobalState() {
@@ -107,6 +110,12 @@ void setup() {
   // All set, we can proceed.
   changeGlobalState(STATE_PROBING_ESP8266);
   Serial.println("Beer controller starting");
+  lcd.begin(20,4);
+  lcd.clear();
+  lcd.home();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("BeerDuino 2022");
 }
 
 void initLcd() {
@@ -215,6 +224,8 @@ void loop() {
       if (execEsp8266Cmd(ESP_STARTSERVER, TIMEOUT)) {
         Serial.print("Server started! IP=");
         Serial.println(getIpAddress());
+        lcd.setCursor(0, 1);
+        lcd.print(getIpAddress());
         resetUartReadState();
         changeGlobalState(STATE_IDLE);
       } else {
@@ -236,7 +247,7 @@ void loop() {
       // Serial.println(cmd);
       // if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
       if (execEsp8266Cmd("AT+CIPSEND=0,5", TIMEOUT)) {
-        Serial3.println("12345");
+        execEsp8266Cmd("12345", TIMEOUT);
         Serial.println("Send OK!");
         delay(100);
       }
