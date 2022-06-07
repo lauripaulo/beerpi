@@ -242,13 +242,13 @@ void loop() {
       Serial.print("Received:\n---\n");
       Serial.print(getUartBuffer());
       Serial.println("---");
-      // String resp = "Received message with: " + getUartBuffer();
-      // String cmd = String(ESP_SEND_DATA) + resp.length() + ":" + resp;
-      // Serial.println(cmd);
-      // if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
-      if (execEsp8266Cmd("AT+CIPSEND=0,5", TIMEOUT)) {
-        execEsp8266Cmd("12345", TIMEOUT);
-        Serial.println("Send OK!");
+
+      String msg = "state:" + String(globalState) + ";lastState=" + String(lastGlobalState) + ";";
+      String cmd = "AT+CIPSEND=0," + String(msg.length());
+      if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
+        execEsp8266Cmd(msg.c_str(), TIMEOUT);
+        Serial.print("Send OK! > ");
+        Serial.println(msg);
         delay(100);
       }
       resetUartReadState();
