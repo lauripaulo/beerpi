@@ -1,17 +1,16 @@
-from asyncio.windows_events import NULL
 import socket
 
 HOST = "192.168.1.118"  # The server's hostname or IP address
 PORT = 333  # The port used by the server
             
 def simple_exchange():
-    message = NULL
+    message = ""
     print(f"Conecting to {HOST} port {PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as conn:
         conn.connect((HOST, PORT))
         while (True):
             message = input("Enter message: ")
-            conn.sendall(b"{message}")
+            conn.sendall(message.encode())
             if (message == "exit!"):
                 break
             data = conn.recv(1024)
