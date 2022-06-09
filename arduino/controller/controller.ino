@@ -73,13 +73,13 @@ byte lastGlobalState = globalState;
 String globalUartBuffer = "";
 String globalIpAddress = "";
 Therms globalTemps = {0, 0, 0};
-DallasTemperature sensors(&oneWire);    // Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);    // Pass our oneWire reference to Dallas Temperature.
 
-void readTemps() {
-  char buffer[32];
-  sprintf(buffer, "t1=%2.2f;t2=%2.2f;t3=%2.2f", globalTemps.t1, globalTemps.t2, globalTemps.t3);
-  Serial.println(buffer);
-  return buffer;
+void readTemps()
+{
+  globalTemps.t1 = 1.1;
+  globalTemps.t2 = 2.2;
+  globalTemps.t2 = 3.3;
 }
 
 String getIpAddress() {
@@ -107,10 +107,10 @@ void changeGlobalState(byte state) {
   globalState = state;
   char buffer[64];
   char lcdBuffer[8];
-  sprintf(buffer, "> changeGlobalState: %i/ lastGlobalState: %i", globalState, lastGlobalState);
+  sprintf(buffer, "> changeGlobalState:%02i / lastGlobalState:%02i", globalState, lastGlobalState);
   Serial.println(buffer);
-  sprintf(lcdBuffer, "%i/%i", globalState, lastGlobalState);
-  lcd.setCursor(16, 0);
+  sprintf(lcdBuffer, "%02i/%02i", globalState, lastGlobalState);
+  lcd.setCursor(15, 0);
   lcd.print(lcdBuffer);
 }
 
@@ -248,25 +248,30 @@ void loop() {
   }
 
   if (getGlobalState() == STATE_IDLE) {
+    readTemps();
     readUART();
     if (isUartReadComplete()) {
-      Serial.print("Received:\n---\n");
-      Serial.print(getUartBuffer());
-      Serial.println("---");
-
       char msg [32];
       char cmd [16];
-      sprintf(msg, "state:%d;lastState=%d", globalState, lastGlobalState);
-      sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
-      //String cmd = String(ESP_SEND_DATA) + String(strlen(msg));
-      if (execEsp8266Cmd(cmd, TIMEOUT)) {
-        execEsp8266Cmd(msg, TIMEOUT);
-        Serial.print("Send OK! > ");
-        Serial.println(msg);
-        delay(100);
+      Serial.print("Received:\n---\n");
+      Serial.print(getUartBuffer());
+      Serial.println("\n---");
+      // commands
+      if (getUartBuffer().indexOf("IPD" > 0)) {
+        String recv = getUartBuffer().substring(getUartBuffer().indexOf(":") + 1, getUartBuffer().length());
+        Serial.print(">>> recv: ");
+        Serial.println(recv);
+        if(recv == "temps") {
+          sprintf(msg, "t1=%2.2f;t2%2.2f;t3=%2.2f", globalTemps.t1, globalTemps.t2, globalTemps.t3);
+          sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
+          sendToClient(cmd, msg);
+        } else if (recv == "state") {
+          sprintf(msg, "state=%d;lastState=%d", globalState, lastGlobalState);
+          sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
+          sendToClient(cmd, msg);
+
+        }
       }
-      resetUartReadState();
-      readTemps();
     }
   }
 
@@ -277,6 +282,25 @@ void loop() {
 
 }
 
+void sendToClient(char cmd[], char msg[]) {
+  if (execEsp8266Cmd(cmd, TIMEOUT)) {
+    resetUartReadState();
+    if (execEsp8266Cmd(msg, TIMEOUT)) {
+      Serial.println(msg);
+      Serial3.flush();
+      // add timeout to this loop.
+      while (true) {
+        readUART();
+        if (isUartReadComplete()) {
+          if (getUartBuffer().indexOf("SEND OK") >=0 ) {
+            break;
+          }
+          resetUartReadState();
+        }
+      }
+    }
+  }
+}
 
 // void loop() {
 //  // print the string when a newline arrives:
