@@ -105,13 +105,13 @@ byte getLastGlobalState(byte state) {
 void changeGlobalState(byte state) {
   lastGlobalState = globalState;
   globalState = state;
-  Serial.print("> changeGlobalState: ");
-  Serial.print(globalState);
-  Serial.print(" / lastGlobalState: ");
-  Serial.println(lastGlobalState);
-  String lcdStateMsg =String(globalState) + "/" + String(lastGlobalState);
+  char buffer[64];
+  char lcdBuffer[8];
+  sprintf(buffer, "> changeGlobalState: %i/ lastGlobalState: %i", globalState, lastGlobalState);
+  Serial.println(buffer);
+  sprintf(lcdBuffer, "%i/%i", globalState, lastGlobalState);
   lcd.setCursor(16, 0);
-  lcd.print(lcdStateMsg);
+  lcd.print(lcdBuffer);
 }
 
 byte getGlobalState() {
@@ -255,9 +255,11 @@ void loop() {
       Serial.println("---");
 
       char msg [32];
+      char cmd [16];
       sprintf(msg, "state:%d;lastState=%d", globalState, lastGlobalState);
-      String cmd = String(ESP_SEND_DATA) + String(strlen(msg));
-      if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
+      sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
+      //String cmd = String(ESP_SEND_DATA) + String(strlen(msg));
+      if (execEsp8266Cmd(cmd, TIMEOUT)) {
         execEsp8266Cmd(msg, TIMEOUT);
         Serial.print("Send OK! > ");
         Serial.println(msg);
