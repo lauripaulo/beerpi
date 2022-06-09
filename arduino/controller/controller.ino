@@ -1,8 +1,11 @@
+#include <stdio.h>
 #include <Wire.h>
-#include <TwiLiquidCrystal.h>                     // Arnakazim's TwiLiquidCrystal Arduino Library
+#include <TwiLiquidCrystal.h>    // Arnakazim's TwiLiquidCrystal Arduino Library
+#include <OneWire.h> 
+#include <DallasTemperature.h>
 
-// Create an LCD object and setting the I2C address
-#define LCD_ADDRESS 0x3f
+#define LCD_ADDRESS   0x3f       // Create an LCD object and setting the I2C address
+#define ONE_WIRE_BUS  2          // Data wire is plugged into pin 2 on the Arduino 
 
 const int TIMEOUT = 10000;
 
@@ -44,26 +47,40 @@ SEND OK
 */
 const char* ESP_SEND_DATA   = "AT+CIPSEND=0,";
 
-/*
-The aim of inputting “+++” is to exit UART-WiFi passthrough transmission and 
-turn back to accept normal AT command, while the TCP connection still remains 
-connected. So, we can also use command “AT+CIPSEND” to turn back into 
-UART-WiFi passthrough transmission
-*/
+// Wifi info
+const char* WIFI_SSID     = "BaenaLaux-2.4G-(Atico)";
+const char* WIFI_PASSWD   = "100%WifiNet";
 
-
-const char* WIFI_SSID     = "";
-const char* WIFI_PASSWD   = "";
+// Setup a oneWire instance to communicate with any OneWire devices  
+// (not just Maxim/Dallas temperature ICs) 
+OneWire oneWire(ONE_WIRE_BUS); 
 
 const TwiLiquidCrystal lcd(LCD_ADDRESS);
 
-// String uartContent = "";         // a String to hold incoming data
+struct Therms {
+  int t1;
+  int t2;
+  int t3;
+};
+
+/* ***
+   *** Global vars - Take extra care! ***
+   ***
+*/
 bool globalUartReadComplete = false;    // whether the string is complete
-bool isLcdEnabled = false;          // Enable LCD
 byte globalState = STATE_IDLE;
 byte lastGlobalState = globalState;
 String globalUartBuffer = "";
 String globalIpAddress = "";
+Therms globalTemps = {0, 0, 0};
+DallasTemperature sensors(&oneWire);    // Pass our oneWire reference to Dallas Temperature. 
+
+void readTemps() {
+  char buffer[32];
+  sprintf(buffer, "t1=%2.2f;t2=%2.2f;t3=%2.2f", globalTemps.t1, globalTemps.t2, globalTemps.t3);
+  Serial.println(buffer);
+  return buffer;
+}
 
 String getIpAddress() {
   return globalIpAddress;
@@ -116,14 +133,8 @@ void setup() {
   lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("BeerDuino 2022");
-}
-
-void initLcd() {
-  if (isLcdEnabled) {
-    lcd.clear();
-    lcd.home();
-    lcd.backlight();
-  }
+  Serial.println("Dallas Temperature IC Control Library Demo");  
+  sensors.begin();    // Start up the library
 }
 
 /*
@@ -243,15 +254,17 @@ void loop() {
       Serial.print(getUartBuffer());
       Serial.println("---");
 
-      String msg = "state:" + String(globalState) + ";lastState=" + String(lastGlobalState) + ";";
-      String cmd = "AT+CIPSEND=0," + String(msg.length());
+      char msg [32];
+      sprintf(msg, "state:%d;lastState=%d", globalState, lastGlobalState);
+      String cmd = String(ESP_SEND_DATA) + String(strlen(msg));
       if (execEsp8266Cmd(cmd.c_str(), TIMEOUT)) {
-        execEsp8266Cmd(msg.c_str(), TIMEOUT);
+        execEsp8266Cmd(msg, TIMEOUT);
         Serial.print("Send OK! > ");
         Serial.println(msg);
         delay(100);
       }
       resetUartReadState();
+      readTemps();
     }
   }
 
