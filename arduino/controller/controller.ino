@@ -259,8 +259,7 @@ void loop() {
       // commands
       if (getUartBuffer().indexOf("IPD" > 0)) {
         String recv = getUartBuffer().substring(getUartBuffer().indexOf(":") + 1, getUartBuffer().length());
-        Serial.print(">>> recv: ");
-        Serial.println(recv);
+        resetUartReadState();
         if(recv == "temps") {
           sprintf(msg, "t1=%2.2f;t2%2.2f;t3=%2.2f", globalTemps.t1, globalTemps.t2, globalTemps.t3);
           sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
@@ -269,7 +268,10 @@ void loop() {
           sprintf(msg, "state=%d;lastState=%d", globalState, lastGlobalState);
           sprintf(cmd, "%s%d", ESP_SEND_DATA, strlen(msg));
           sendToClient(cmd, msg);
-
+        } else {
+          Serial.print(">>> recv: ");
+          Serial.println(recv);
+          sendToClient(ESP_SEND_DATA, "nok");
         }
       }
     }
@@ -293,9 +295,9 @@ void sendToClient(char cmd[], char msg[]) {
         readUART();
         if (isUartReadComplete()) {
           if (getUartBuffer().indexOf("SEND OK") >=0 ) {
+            resetUartReadState();
             break;
           }
-          resetUartReadState();
         }
       }
     }

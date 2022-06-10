@@ -7,6 +7,7 @@ def simple_exchange():
     message = ""
     print(f"Conecting to {HOST} port {PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as conn:
+        conn.settimeout(5)
         conn.connect((HOST, PORT))
         while (True):
             message = input("Enter message: ")
